@@ -9,7 +9,7 @@ const NET = {
   // Supabase の anon(public)キー。新形式の publishable キー(sb_publishable_...)でも、旧形式(Legacy の anon, eyJ...)でもよい
   anonKey: "sb_publishable_8JV8wQzUzBgP9G5t_eBm7A_CNWe8096",
   // 設定のバージョン。司会者側とスマホ側で一致しないとスマホに警告が出る
-  configVersion: "1",
+  configVersion: "2",
   // スマホ用ページを公開した URL(QR コードはこの URL で作られる)
   votePageUrl: "https://t-ino-oneproof.github.io/nenkai-vote/vote.html",
   // 名前の文字数上限

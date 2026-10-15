@@ -191,8 +191,15 @@ function vote(side){
   var tries=0;
   function attempt(){
     tries++;
-    return api('votes?on_conflict=player_id,token',{method:'POST',prefer:'resolution=merge-duplicates,return=minimal',body:{player_id:player.id,question_idx:qi,token:token,side:side}})
-      .then(function(){sent[token]=side;sending=false;$('msg').className='';render();})
+    return api('rpc/cast_vote',{method:'POST',body:{pid:player.id,tok:token,q:qi,s:side}})
+      .then(function(res){
+        sending=false;
+        if(res==='ok'){sent[token]=side;$('msg').className='';render();return;}
+        render();
+        if(res==='closed'){$('msg').textContent='締切に間に合いませんでした';$('msg').className='ng';}
+        else if(res==='unknown_player'){$('msg').textContent='登録が見つかりません。「別の人として登録し直す」から登録してください';$('msg').className='ng';}
+        else{$('msg').textContent='送れませんでした('+res+')';$('msg').className='ng';}
+      })
       .catch(function(e){
         if(tries<3)return new Promise(function(r){setTimeout(r,500);}).then(attempt);
         sending=false;render();$('msg').textContent='届いていません。もう一度押してください';$('msg').className='ng';
