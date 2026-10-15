@@ -1,0 +1,3 @@
+# 秘密鍵は絶対に入れない
+config.host.js
+*.host.js
