@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>納会クイズ</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#0b0f1a;color:#fff;font-family:"Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;user-select:none;-webkit-user-select:none}
+body{display:flex;flex-direction:column;min-height:100%}
+.screen{display:none;flex-direction:column;flex:1;padding:16px}
+.screen.show{display:flex}
+h1{font-size:22px;text-align:center;color:#ffcc33;margin:8px 0 14px}
+.sub{font-size:14px;color:#9ab;text-align:center;line-height:1.5}
+input{width:100%;font-size:22px;padding:12px;border-radius:10px;border:2px solid #445;background:#141a2c;color:#fff;text-align:center;margin:10px 0}
+input:focus{outline:none;border-color:#ffcc33}
+.btn{display:block;width:100%;font-size:20px;font-weight:700;padding:16px;border-radius:12px;border:none;color:#fff;background:#3498db;margin-top:10px;cursor:pointer}
+.btn.sub2{background:#2c3550;font-size:16px;padding:12px}
+.btn:disabled{opacity:.35}
+.link{text-align:center;color:#9ab;font-size:14px;margin-top:18px;text-decoration:underline;line-height:1.5}
+#grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:10px 0;max-height:40vh;overflow-y:auto;padding:4px;border:2px solid #223;border-radius:10px}
+#grid div{border:3px solid transparent;border-radius:10px;background:#141a2c;padding:2px;min-width:0}
+#grid div.sel{border-color:#ffcc33;background:#2a3350}
+#grid svg{width:100%;height:auto;display:block}
+#me{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:6px}
+#me svg{width:44px;height:53px}
+#me b{font-size:18px}
+#qno{font-size:44px;font-weight:900;text-align:center;margin:6px 0 2px}
+#status{font-size:18px;text-align:center;min-height:28px;color:#cde;font-weight:700}
+#status.open{color:#3ddc84}
+#btns{display:flex;gap:12px;flex:1;margin:14px 0;min-height:40vh}
+#btns button{flex:1;font-size:40px;font-weight:900;border-radius:18px;border:4px solid transparent;color:#fff;cursor:pointer}
+#btnL{background:#4da3ff}#btnR{background:#ff7a59}
+#btns button:disabled{opacity:.3}
+#btns button.sel{border-color:#fff;box-shadow:0 0 0 4px #ffcc33 inset}
+#msg{font-size:20px;font-weight:700;text-align:center;min-height:56px;padding:12px;border-radius:12px;background:#141a2c}
+#msg.ok{color:#3ddc84}#msg.ng{color:#ff6b6b;background:#2a1418}#msg.wait{color:#ffcc33}
+#banner{display:none;background:#b03a3a;color:#fff;font-size:14px;text-align:center;padding:8px}
+#banner.show{display:block}
+.foot{font-size:12px;color:#667;text-align:center;margin-top:10px;line-height:1.6}
+#list div{display:flex;align-items:center;gap:12px;padding:10px;border-bottom:1px solid #223;font-size:18px}
+#list svg{width:40px;height:48px}
+</style>
+</head>
+<body>
+<div id="banner"></div>
+
+<!-- 登録 -->
+<div class="screen show" id="reg">
+  <h1>納会クイズ 参加登録</h1>
+  <div class="sub">名前(8文字まで)とアバターを選んでください</div>
+  <input id="name" maxlength="8" placeholder="なまえ" autocomplete="off">
+  <div id="grid"></div>
+  <button class="btn sub2" id="shuffle">おまかせで選ぶ</button>
+  <button class="btn" id="regBtn">登録する</button>
+  <div class="link" id="toRelogin">登録済みの人はこちら(画面が消えた・別の端末の場合)</div>
+  <div class="foot">※ 動かなくなったらページを再読み込みしてください</div>
+</div>
+
+<!-- 登録済みの人の復帰 -->
+<div class="screen" id="relogin">
+  <h1>自分の名前を選ぶ</h1>
+  <div id="list"></div>
+  <button class="btn sub2" id="backReg">戻る</button>
+</div>
+
+<!-- 投票 -->
+<div class="screen" id="main">
+  <div id="me"></div>
+  <div id="qno">第 - 問</div>
+  <div id="status">接続中…</div>
+  <div id="btns">
+    <button id="btnL" disabled>← 左</button>
+    <button id="btnR" disabled>右 →</button>
+  </div>
+  <div id="msg">司会者の合図を待ってください</div>
+  <div class="foot">動かなくなったらページを再読み込み<br><span id="reReg" style="text-decoration:underline">別の人として登録し直す</span></div>
+</div>
+
+<script src="config.js"></script>
+<script src="avatar.js"></script>
+<script src="avatars.js"></script>
+<script>
+// ===== 共通 =====
+var $=function(id){return document.getElementById(id);};
+var API=NET.supabaseUrl.replace(/\/+$/,'').replace(/\/rest\/v1$/,'')+'/rest/v1/';
+var HEAD={'apikey':NET.anonKey,'Content-Type':'application/json'};
+if(/^eyJ/.test(NET.anonKey))HEAD['Authorization']='Bearer '+NET.anonKey;   // 旧形式(JWT)のキーだけ Authorization も付ける
+function api(path,opt){
+  opt=opt||{};var h={};for(var k in HEAD)h[k]=HEAD[k];if(opt.prefer)h['Prefer']=opt.prefer;
+  return fetch(API+path,{method:opt.method||'GET',headers:h,body:opt.body?JSON.stringify(opt.body):undefined,cache:'no-store'})
+    .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text().then(function(t){return t?JSON.parse(t):null;});});
+}
+function store(k,v){try{if(v==null)localStorage.removeItem(k);else localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+function load(k){try{return JSON.parse(localStorage.getItem(k));}catch(e){return null;}}
+function uuid(){if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();var s='';for(var i=0;i<32;i++)s+=Math.floor(Math.random()*16).toString(16);return s;}
+function show(id){document.querySelectorAll('.screen').forEach(function(e){e.classList.toggle('show',e.id===id);});}
+function banner(t){var b=$('banner');b.textContent=t||'';b.classList.toggle('show',!!t);}
+
+var device=load('quiz.device');if(!device){device=uuid();store('quiz.device',device);}
+var player=load('quiz.player');   // {id,name,look}
+
+// ===== 登録画面 =====
+var selected=-1;
+(function buildGrid(){
+  var g=$('grid');
+  AVATAR_PRESETS.forEach(function(p,i){
+    var d=document.createElement('div');d.innerHTML=AVATAR.svg(p.look);
+    d.onclick=function(){select(i);};g.appendChild(d);
+  });
+})();
+function select(i){selected=i;var ch=$('grid').children;for(var k=0;k<ch.length;k++)ch[k].classList.toggle('sel',k===i);if(ch[i])ch[i].scrollIntoView({block:'nearest'});}
+$('shuffle').onclick=function(){select(Math.floor(Math.random()*AVATAR_PRESETS.length));};
+$('regBtn').onclick=function(){
+  var name=$('name').value.replace(/^\s+|\s+$/g,'');
+  if(!name){alert('名前を入れてください');return;}
+  if(name.length>NET.nameMax){alert('名前は'+NET.nameMax+'文字までです');return;}
+  if(selected<0){alert('アバターを選んでください(おまかせでも可)');return;}
+  var btn=$('regBtn');btn.disabled=true;btn.textContent='登録中…';
+  var body={name:name,look:AVATAR_PRESETS[selected].look,device:device};
+  api('players?on_conflict=device&select=id,name,look',{method:'POST',body:body,prefer:'resolution=merge-duplicates,return=representation'})
+    .then(function(rows){player=rows[0];store('quiz.player',player);wake();enterMain();})
+    .catch(function(e){alert('登録できませんでした。電波を確認してもう一度押してください\n('+e.message+')');})
+    .then(function(){btn.disabled=false;btn.textContent='登録する';});
+};
+$('toRelogin').onclick=function(){
+  var l=$('list');l.innerHTML='<div>読み込み中…</div>';show('relogin');
+  api('players?select=id,name,look&hidden=eq.false&order=created_at.asc').then(function(rows){
+    l.innerHTML='';
+    if(!rows.length){l.innerHTML='<div>まだ誰も登録していません</div>';return;}
+    rows.forEach(function(p){
+      var d=document.createElement('div');d.innerHTML=AVATAR.svg(p.look)+'<span>'+p.name+'</span>';
+      d.onclick=function(){if(confirm('「'+p.name+'」として参加しますか?')){player=p;store('quiz.player',player);wake();enterMain();}};
+      l.appendChild(d);
+    });
+  }).catch(function(){l.innerHTML='<div>読み込めませんでした。戻ってもう一度お試しください</div>';});
+};
+$('backReg').onclick=function(){show('reg');};
+$('reReg').onclick=function(){if(confirm('別の人として登録し直しますか?')){player=null;store('quiz.player',null);show('reg');}};
+
+// ===== 投票画面 =====
+var state=null,lastToken=null,sent={},sending=false,failCount=0,pollTimer=0;
+function enterMain(){
+  $('me').innerHTML=AVATAR.svg(player.look)+'<b>'+player.name+'</b>';
+  show('main');poll();
+}
+function canVote(){
+  if(!state||!state.open||!state.token)return false;
+  if(state.open_until&&Date.parse(state.open_until)<Date.now())return false;
+  return true;
+}
+function render(){
+  var qn=$('qno'),st=$('status'),msg=$('msg');
+  if(!state){qn.textContent='第 - 問';st.textContent='接続中…';return;}
+  if(state.question_idx<0){qn.textContent='準備中';st.textContent='まもなく始まります';st.className='';}
+  else{qn.textContent='第 '+(state.question_idx+1)+' 問';}
+  var open=canVote(),mine=sent[state.token];
+  if(state.question_idx>=0){
+    st.textContent=open?'回答受付中!':'締切';st.className=open?'open':'';
+  }
+  $('btnL').disabled=!open||sending;$('btnR').disabled=!open||sending;
+  $('btnL').classList.toggle('sel',mine==='left');$('btnR').classList.toggle('sel',mine==='right');
+  if(sending)return;
+  if(open){
+    if(mine){msg.textContent='送信済み: '+(mine==='left'?'← 左':'右 →')+' ✓  (押し直しで変更できます)';msg.className='ok';}
+    else if(msg.className!=='ng'){msg.textContent='左か右を押してください';msg.className='';}
+  }else{
+    if(state.question_idx<0){msg.textContent='司会者の合図を待ってください';msg.className='';}
+    else if(mine){msg.textContent='締切。あなたの回答: '+(mine==='left'?'← 左':'右 →');msg.className='';}
+    else if(state.token&&lastToken===state.token&&!mine){msg.textContent='締切(未回答)';msg.className='';}
+    else{msg.textContent='次の問題を待ってください';msg.className='';}
+  }
+}
+function poll(){
+  clearTimeout(pollTimer);
+  api('state?id=eq.1&select=question_idx,token,open,open_until,config_version').then(function(rows){
+    failCount=0;banner('');
+    var s=rows[0];
+    if(s.config_version&&s.config_version!==NET.configVersion)banner('設定が古い可能性があります。ページを再読み込みしてください');
+    if(s.token!==lastToken){lastToken=s.token;if(!sent[s.token])$('msg').className='';}
+    state=s;render();
+  }).catch(function(){
+    failCount++;if(failCount>=3)banner('通信できません。再試行中… (電波を確認してください)');
+  }).then(function(){pollTimer=setTimeout(poll,NET.pollMs||1000);});
+}
+function vote(side){
+  if(!canVote()||sending)return;
+  var token=state.token,qi=state.question_idx;
+  sending=true;$('msg').textContent='送信中…';$('msg').className='wait';render();
+  var tries=0;
+  function attempt(){
+    tries++;
+    return api('votes?on_conflict=player_id,token',{method:'POST',prefer:'resolution=merge-duplicates,return=minimal',body:{player_id:player.id,question_idx:qi,token:token,side:side}})
+      .then(function(){sent[token]=side;sending=false;$('msg').className='';render();})
+      .catch(function(e){
+        if(tries<3)return new Promise(function(r){setTimeout(r,500);}).then(attempt);
+        sending=false;render();$('msg').textContent='届いていません。もう一度押してください';$('msg').className='ng';
+      });
+  }
+  attempt();
+}
+$('btnL').onclick=function(){vote('left');};
+$('btnR').onclick=function(){vote('right');};
+
+// 画面を暗くしない(対応機種のみ)。復帰時は即時に読み直す
+var lock=null;
+function wake(){try{if(navigator.wakeLock)navigator.wakeLock.request('screen').then(function(l){lock=l;}).catch(function(){});}catch(e){}}
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'){if(player){poll();wake();}}});
+
+// 起動
+$('name').setAttribute('maxlength',NET.nameMax);
+if(player)enterMain();
+// 動作確認用: URL の末尾に #test を付けると自動で登録し、受付中なら「左」を押す
+if(location.hash==='#test'){$('name').value='テスト';select(0);setTimeout(function(){$('regBtn').click();},100);setInterval(function(){if(player&&state&&canVote()&&!sent[state.token]&&!sending)vote('left');},200);}
+</script>
+</body>
+</html>
